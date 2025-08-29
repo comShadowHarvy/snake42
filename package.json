@@ -1,0 +1,49 @@
+{
+  "name": "snake42",
+  "version": "1.0.0",
+  "description": "Multi-AI Snake Game - Electron Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently \"npm run watch\" \"electron . --dev\"",
+    "watch": "echo 'Watching for changes...'",
+    "build": "electron-builder",
+    "build-all": "electron-builder -mwl",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["snake", "game", "ai", "electron", "desktop"],
+  "author": "Snake42 Developer",
+  "license": "MIT",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.snake42.app",
+    "productName": "Snake42 AI",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.games"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "electron": "^37.4.0",
+    "electron-builder": "^26.0.12",
+    "electron-reload": "^2.0.0-alpha.1"
+  },
+  "dependencies": {
+    "howler": "^2.2.4"
+  }
+}

@@ -1,6 +1,6 @@
 /**
- * Snake42 AI - Game Engine
- * Core game loop, collision detection, and world management
+ * Snake42 AI - Upgraded Game Engine
+ * Handles core game loop, power-ups, audio integration, combos, and collision logic
  */
 
 class GameEngine {
@@ -8,7 +8,6 @@ class GameEngine {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         
-        // Game settings with defaults
         this.settings = {
             gridSize: 25,
             gameSpeed: 5,
@@ -19,77 +18,68 @@ class GameEngine {
             ...settings
         };
         
-        // Game state
-        this.state = 'MENU'; // MENU, LOADING, PLAYING, PAUSED, GAME_OVER
+        this.state = 'MENU';
         this.isRunning = false;
         this.isPaused = false;
         
-        // World dimensions
         this.updateWorldDimensions();
         
-        // Game objects
         this.snakes = [];
         this.food = [];
+        this.powerUps = [];
         this.particles = [];
         
-        // Timing
         this.lastTime = 0;
         this.deltaTime = 0;
         this.gameTime = 0;
         this.targetFPS = 60;
-        this.frameInterval = 1000 / this.targetFPS;
-        this.gameSpeedMultiplier = 1;
         
-        // Statistics
         this.fps = 60;
         this.frameCount = 0;
         this.lastFpsUpdate = 0;
         
-        // Event system
         this.eventListeners = {};
         
-        // Grid for collision detection
         this.grid = [];
         this.initializeGrid();
         
-        // Bind methods
         this.gameLoop = this.gameLoop.bind(this);
         this.handleResize = this.handleResize.bind(this);
         
-        // Setup
         this.setupCanvas();
         this.bindEvents();
+
+        // Combo system
+        this.combo = 0;
+        this.comboTimer = 0;
         
         console.log('GameEngine initialized with settings:', this.settings);
     }
     
     updateWorldDimensions() {
-        const cellSize = 20; // Fixed cell size for consistent visuals
+        const cellSize = 20;
         this.cellSize = cellSize;
         
-        // Calculate grid dimensions based on canvas size
         this.worldWidth = Math.floor(this.canvas.width / cellSize);
         this.worldHeight = Math.floor(this.canvas.height / cellSize);
-        
-        console.log(`World dimensions: ${this.worldWidth}x${this.worldHeight}`);
     }
     
     setupCanvas() {
-        // Handle high DPI displays
         const dpr = window.devicePixelRatio || 1;
         const rect = this.canvas.getBoundingClientRect();
         
-        this.canvas.width = rect.width * dpr;
-        this.canvas.height = rect.height * dpr;
-        this.ctx.scale(dpr, dpr);
+        if (rect.width > 0 && rect.height > 0) {
+            this.canvas.width = rect.width * dpr;
+            this.canvas.height = rect.height * dpr;
+            this.ctx.scale(dpr, dpr);
+            this.canvas.style.width = rect.width + 'px';
+            this.canvas.style.height = rect.height + 'px';
+        } else {
+            this.canvas.width = 800;
+            this.canvas.height = 600;
+        }
         
-        this.canvas.style.width = rect.width + 'px';
-        this.canvas.style.height = rect.height + 'px';
-        
-        // Smooth rendering
         this.ctx.imageSmoothingEnabled = true;
-        this.ctx.imageSmoothingQuality = 'high';
-        
         this.updateWorldDimensions();
     }
     
@@ -98,7 +88,6 @@ class GameEngine {
     }
     
     handleResize() {
-        // Debounce resize events
         clearTimeout(this.resizeTimeout);
         this.resizeTimeout = setTimeout(() => {
             this.setupCanvas();
@@ -116,13 +105,14 @@ class GameEngine {
                     y: y,
                     occupied: false,
                     occupiedBy: null,
-                    isFood: false
+                    isFood: false,
+                    isPowerUp: false,
+                    powerUpType: null
                 };
             }
         }
     }
     
-    // Event system
     on(event, callback) {
         if (!this.eventListeners[event]) {
             this.eventListeners[event] = [];
@@ -132,94 +122,66 @@ class GameEngine {
     
     emit(event, data = {}) {
         if (this.eventListeners[event]) {
-            this.eventListeners[event].forEach(callback => {
-                try {
-                    callback(data);
-                } catch (error) {
-                    console.error(`Error in event listener for ${event}:`, error);
-                }
+            this.eventListeners[event].forEach(cb => {
+                try { cb(data); } catch (e) { console.error(e); }
             });
         }
     }
     
-    // Game state management
     setState(newState) {
         const oldState = this.state;
         this.state = newState;
         this.emit('stateChanged', { oldState, newState });
-        console.log(`Game state changed: ${oldState} -> ${newState}`);
     }
     
     start() {
         if (this.isRunning) return;
-        
         this.isRunning = true;
         this.setState('PLAYING');
         this.lastTime = performance.now();
         this.gameLoop();
-        
         this.emit('gameStarted');
-        console.log('Game started');
     }
     
     pause() {
         this.isPaused = !this.isPaused;
-        if (this.isPaused) {
-            this.setState('PAUSED');
-        } else {
-            this.setState('PLAYING');
-            this.lastTime = performance.now(); // Reset timing
-        }
-        
+        this.setState(this.isPaused ? 'PAUSED' : 'PLAYING');
+        if (!this.isPaused) this.lastTime = performance.now();
         this.emit('gamePaused', { isPaused: this.isPaused });
-        console.log(this.isPaused ? 'Game paused' : 'Game resumed');
     }
     
     stop() {
         this.isRunning = false;
         this.setState('GAME_OVER');
         this.emit('gameStopped');
-        console.log('Game stopped');
     }
     
     reset() {
-        // Clear game objects
         this.snakes = [];
         this.food = [];
+        this.powerUps = [];
         this.particles = [];
-        
-        // Reset timing
         this.gameTime = 0;
         this.lastTime = 0;
-        
-        // Reset grid
+        this.combo = 0;
         this.initializeGrid();
-        
         this.emit('gameReset');
-        console.log('Game reset');
     }
     
-    // Game loop
     gameLoop(currentTime = performance.now()) {
         if (!this.isRunning) return;
         
-        // Calculate delta time
         this.deltaTime = currentTime - this.lastTime;
         this.lastTime = currentTime;
         
-        // Update FPS counter
         this.updateFPS(currentTime);
         
-        // Skip update if paused
         if (!this.isPaused) {
             this.gameTime += this.deltaTime;
             this.update(this.deltaTime);
         }
         
-        // Always render (for pause screen, etc.)
         this.render();
-        
-        // Schedule next frame
         requestAnimationFrame(this.gameLoop);
     }
     
@@ -234,29 +196,30 @@ class GameEngine {
     }
     
     update(deltaTime) {
-        // Update game speed based on settings
-        this.gameSpeedMultiplier = this.settings.gameSpeed / 5; // Normalize to base speed
-        
+        // Combo timeout decay
+        if (this.comboTimer > 0) {
+            this.comboTimer -= deltaTime;
+            if (this.comboTimer <= 0) {
+                this.combo = 0;
+            }
+        }
+
         // Update snakes
-        this.snakes.forEach((snake, index) => {
+        this.snakes.forEach((snake) => {
             if (snake.isAlive) {
-                snake.update(deltaTime * this.gameSpeedMultiplier, this);
+                snake.update(deltaTime, this);
             }
         });
         
         // Update particles
-        this.particles = this.particles.filter(particle => {
-            particle.update(deltaTime);
-            return particle.isAlive;
+        this.particles = this.particles.filter(p => {
+            p.update(deltaTime);
+            return p.isAlive;
         });
         
-        // Check collisions
         this.checkCollisions();
-        
-        // Manage food spawning
         this.manageFoodSpawning();
-        
-        // Check game over conditions
+        this.managePowerUpSpawning();
         this.checkGameOver();
     }
     
@@ -266,8 +229,12 @@ class GameEngine {
             
             const head = snake.getHead();
             if (!this.isValidPosition(head.x, head.y)) {
-                // Wall collision
-                this.handleSnakeDeath(snake, 'wall');
+                if (snake.shieldActive) {
+                    snake.shieldActive = false;
+                    this.bounceSnake(snake);
+                } else {
+                    this.handleSnakeDeath(snake, 'wall');
+                }
                 return;
             }
             
@@ -278,110 +245,136 @@ class GameEngine {
                 this.handleFoodEaten(snake, head);
             }
             
-            // Snake collision (self or others)
+            // Power-up collision
+            if (cell.isPowerUp) {
+                this.handlePowerUpCollected(snake, head, cell.powerUpType);
+            }
+            
+            // Snake body collision
             if (cell.occupied && cell.occupiedBy !== snake) {
-                this.handleSnakeDeath(snake, 'snake');
+                if (snake.shieldActive) {
+                    snake.shieldActive = false;
+                    this.bounceSnake(snake);
+                } else {
+                    this.handleSnakeDeath(snake, 'snake');
+                }
             }
         });
+    }
+
+    bounceSnake(snake) {
+        // Reverse direction on shield bump
+        snake.direction = { x: -snake.direction.x, y: -snake.direction.y };
+        snake.nextDirection = { ...snake.direction };
+        if (window.soundEngine) window.soundEngine.playPowerUpSound();
     }
     
     handleFoodEaten(snake, position) {
-        // Remove food from grid and array
-        const foodIndex = this.food.findIndex(f => f.x === position.x && f.y === position.y);
-        if (foodIndex >= 0) {
-            this.food.splice(foodIndex, 1);
-        }
+        const foodIdx = this.food.findIndex(f => f.x === position.x && f.y === position.y);
+        if (foodIdx >= 0) this.food.splice(foodIdx, 1);
         
         this.grid[position.y][position.x].isFood = false;
         
-        // Grow snake
-        snake.grow();
-        
-        // Create particle effect
-        if (this.settings.particlesEnabled) {
-            this.createParticleEffect('collect', position);
+        // Combo multiplier
+        if (snake.isPlayer) {
+            this.combo++;
+            this.comboTimer = 3000; // 3 seconds to keep combo
+            if (window.soundEngine) window.soundEngine.playEatSound(false);
         }
+
+        const scoreBonus = 10 * (snake.doubleScoreActive ? 2 : 1) * (snake.isPlayer ? Math.min(this.combo, 5) : 1);
+        snake.grow();
+        snake.score += scoreBonus;
         
-        // Emit event
-        this.emit('foodEaten', {
-            snake: snake,
-            position: position,
-            score: snake.getScore()
-        });
-        
-        console.log(`Snake ${snake.id} ate food at (${position.x}, ${position.y})`);
+        this.emit('foodEaten', { snake, position, scoreBonus });
+    }
+
+    handlePowerUpCollected(snake, position, type) {
+        const pIdx = this.powerUps.findIndex(p => p.x === position.x && p.y === position.y);
+        if (pIdx >= 0) this.powerUps.splice(pIdx, 1);
+
+        this.grid[position.y][position.x].isPowerUp = false;
+        this.grid[position.y][position.x].powerUpType = null;
+
+        if (window.soundEngine) window.soundEngine.playPowerUpSound();
+
+        // Apply powerup effects
+        switch (type) {
+            case 'speed':
+                snake.applySpeedBoost(5000);
+                break;
+            case 'shield':
+                snake.shieldActive = true;
+                break;
+            case 'shrink':
+                snake.shrink(3);
+                break;
+            case 'double':
+                snake.applyDoubleScore(8000);
+                break;
+            case 'freeze':
+                this.snakes.forEach(s => {
+                    if (!s.isPlayer) s.applyFreeze(4000);
+                });
+                break;
+        }
+
+        this.emit('powerUpCollected', { snake, position, type });
     }
     
     handleSnakeDeath(snake, cause) {
-        snake.kill();
+        snake.isAlive = false;
+        if (window.soundEngine && snake.isPlayer) window.soundEngine.playCrashSound();
         
-        // Create particle effect
-        if (this.settings.particlesEnabled) {
-            this.createParticleEffect('explosion', snake.getHead());
-        }
-        
-        // Remove snake from grid
-        snake.body.forEach(segment => {
-            if (this.isValidPosition(segment.x, segment.y)) {
-                this.grid[segment.y][segment.x].occupied = false;
-                this.grid[segment.y][segment.x].occupiedBy = null;
+        // Convert snake body into food or particles
+        snake.body.forEach(seg => {
+            if (this.isValidPosition(seg.x, seg.y)) {
+                this.grid[seg.y][seg.x].occupied = false;
+                this.grid[seg.y][seg.x].occupiedBy = null;
             }
         });
         
-        // Emit event
-        this.emit('snakeDied', {
-            snake: snake,
-            cause: cause,
-            position: snake.getHead()
-        });
-        
-        console.log(`Snake ${snake.id} died from ${cause}`);
+        this.emit('snakeDied', { snake, cause, position: snake.getHead() });
     }
     
     manageFoodSpawning() {
-        const targetFoodCount = Math.max(2, Math.floor(this.snakes.filter(s => s.isAlive).length * 1.5));
-        
-        while (this.food.length < targetFoodCount) {
-            const position = this.findEmptyPosition();
-            if (position) {
-                this.spawnFood(position.x, position.y);
+        const minFood = Math.max(2, this.snakes.filter(s => s.isAlive).length);
+        while (this.food.length < minFood) {
+            const pos = this.getRandomEmptyPosition();
+            if (pos) {
+                this.food.push(pos);
+                this.grid[pos.y][pos.x].isFood = true;
             } else {
-                break; // No empty positions available
+                break;
+            }
+        }
+    }
+
+    managePowerUpSpawning() {
+        if (this.powerUps.length < 2 && Math.random() < 0.005) { // 0.5% chance per frame
+            const pos = this.getRandomEmptyPosition();
+            if (pos) {
+                const types = ['speed', 'shield', 'shrink', 'double', 'freeze'];
+                const type = types[Math.floor(Math.random() * types.length)];
+                this.powerUps.push({ ...pos, type });
+                this.grid[pos.y][pos.x].isPowerUp = true;
+                this.grid[pos.y][pos.x].powerUpType = type;
             }
         }
     }
     
-    spawnFood(x, y) {
-        if (!this.isValidPosition(x, y) || this.grid[y][x].occupied || this.grid[y][x].isFood) {
-            return false;
-        }
-        
-        const food = { x, y, spawnTime: this.gameTime };
-        this.food.push(food);
-        this.grid[y][x].isFood = true;
-        
-        // Create spawn particle effect
-        if (this.settings.particlesEnabled) {
-            this.createParticleEffect('spawn', { x, y });
-        }
-        
-        this.emit('foodSpawned', { position: { x, y } });
-        return true;
-    }
-    
-    findEmptyPosition() {
-        const maxAttempts = 100;
-        
-        for (let attempts = 0; attempts < maxAttempts; attempts++) {
+    getRandomEmptyPosition() {
+        let attempts = 0;
+        while (attempts < 50) {
             const x = Math.floor(Math.random() * this.worldWidth);
             const y = Math.floor(Math.random() * this.worldHeight);
             
-            if (this.isValidPosition(x, y) && !this.grid[y][x].occupied && !this.grid[y][x].isFood) {
+            if (this.isValidPosition(x, y) && !this.grid[y][x].occupied && !this.grid[y][x].isFood && !this.grid[y][x].isPowerUp) {
                 return { x, y };
             }
+            attempts++;
         }
-        
-        return null; // No empty position found
+        return null;
     }
     
     isValidPosition(x, y) {
@@ -389,189 +382,115 @@ class GameEngine {
     }
     
     checkGameOver() {
-        const aliveSnakes = this.snakes.filter(snake => snake.isAlive);
-        const humanPlayer = this.snakes.find(snake => snake.isPlayer);
+        const playerSnake = this.getPlayerSnake();
+        const aliveSnakes = this.getAliveSnakes();
         
-        // Game over if human player is dead
-        if (humanPlayer && !humanPlayer.isAlive) {
+        if (playerSnake && !playerSnake.isAlive) {
+            if (window.soundEngine) window.soundEngine.playGameOverSound();
             this.stop();
-        }
-        
-        // Alternative: Game over if all snakes are dead
-        if (aliveSnakes.length === 0) {
+        } else if (aliveSnakes.length <= 1) {
+            // Victory or solo state
             this.stop();
         }
     }
     
-    // Rendering
     render() {
-        // Clear canvas
-        this.ctx.fillStyle = '#0a0a0f';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Draw grid (subtle)
-        this.drawGrid();
+        // Draw grid lines (faint dark neon grid)
+        this.drawGridLines();
         
         // Draw food
         this.drawFood();
+
+        // Draw power-ups
+        this.drawPowerUps();
         
         // Draw snakes
-        this.snakes.forEach(snake => {
-            snake.render(this.ctx, this.cellSize);
-        });
+        this.snakes.forEach(snake => snake.render(this.ctx, this.cellSize));
         
         // Draw particles
-        this.particles.forEach(particle => {
-            particle.render(this.ctx, this.cellSize);
-        });
-        
-        // Draw pause overlay if paused
-        if (this.isPaused) {
-            this.drawPauseOverlay();
-        }
+        this.particles.forEach(particle => particle.render(this.ctx));
     }
-    
-    drawGrid() {
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+
+    drawGridLines() {
+        this.ctx.strokeStyle = 'rgba(0, 212, 255, 0.04)';
         this.ctx.lineWidth = 1;
-        
-        // Vertical lines
-        for (let x = 0; x <= this.worldWidth; x++) {
-            const pixelX = x * this.cellSize;
+        for (let x = 0; x < this.canvas.width; x += this.cellSize) {
             this.ctx.beginPath();
-            this.ctx.moveTo(pixelX, 0);
-            this.ctx.lineTo(pixelX, this.worldHeight * this.cellSize);
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.canvas.height);
             this.ctx.stroke();
         }
-        
-        // Horizontal lines
-        for (let y = 0; y <= this.worldHeight; y++) {
-            const pixelY = y * this.cellSize;
+        for (let y = 0; y < this.canvas.height; y += this.cellSize) {
             this.ctx.beginPath();
-            this.ctx.moveTo(0, pixelY);
-            this.ctx.lineTo(this.worldWidth * this.cellSize, pixelY);
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.canvas.width, y);
             this.ctx.stroke();
         }
     }
     
     drawFood() {
-        this.food.forEach(food => {
-            const x = food.x * this.cellSize;
-            const y = food.y * this.cellSize;
+        this.food.forEach(f => {
+            const px = f.x * this.cellSize + this.cellSize / 2;
+            const py = f.y * this.cellSize + this.cellSize / 2;
             
-            // Animated glow effect
-            const pulse = Math.sin(this.gameTime * 0.005) * 0.3 + 0.7;
-            const glowSize = this.cellSize * 0.6 * pulse;
-            
-            // Outer glow
-            const gradient = this.ctx.createRadialGradient(
-                x + this.cellSize / 2, y + this.cellSize / 2, 0,
-                x + this.cellSize / 2, y + this.cellSize / 2, glowSize
-            );
-            gradient.addColorStop(0, '#ffe66d');
-            gradient.addColorStop(1, 'rgba(255, 230, 109, 0)');
-            
-            this.ctx.fillStyle = gradient;
-            this.ctx.fillRect(x - glowSize/2 + this.cellSize/2, y - glowSize/2 + this.cellSize/2, glowSize, glowSize);
-            
-            // Food center
+            this.ctx.save();
+            this.ctx.shadowColor = '#ffe66d';
+            this.ctx.shadowBlur = 10;
             this.ctx.fillStyle = '#ffe66d';
-            this.ctx.fillRect(x + 2, y + 2, this.cellSize - 4, this.cellSize - 4);
+            this.ctx.beginPath();
+            this.ctx.arc(px, py, this.cellSize / 2.5, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.restore();
+        });
+    }
+
+    drawPowerUps() {
+        const icons = { speed: '⚡', shield: '🛡️', shrink: '🧪', double: '🌟', freeze: '❄️' };
+        this.powerUps.forEach(p => {
+            const px = p.x * this.cellSize + this.cellSize / 2;
+            const py = p.y * this.cellSize + this.cellSize / 2;
+
+            this.ctx.save();
+            this.ctx.font = `${this.cellSize * 0.8}px monospace`;
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(icons[p.type] || '❓', px, py);
+            this.ctx.restore();
         });
     }
     
-    drawPauseOverlay() {
-        // Semi-transparent overlay
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Pause text
-        this.ctx.fillStyle = '#00d4ff';
-        this.ctx.font = '48px Orbitron';
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        
-        const text = 'PAUSED';
-        const x = this.canvas.width / 2;
-        const y = this.canvas.height / 2;
-        
-        // Text glow effect
-        this.ctx.shadowColor = '#00d4ff';
-        this.ctx.shadowBlur = 20;
-        this.ctx.fillText(text, x, y);
-        
-        // Reset shadow
-        this.ctx.shadowColor = 'transparent';
-        this.ctx.shadowBlur = 0;
-    }
-    
-    // Particle system integration
-    createParticleEffect(type, position) {
-        if (!this.settings.particlesEnabled || !window.ParticleSystem) return;
-        
-        const particleSystem = window.ParticleSystem;
-        const worldPos = {
-            x: position.x * this.cellSize + this.cellSize / 2,
-            y: position.y * this.cellSize + this.cellSize / 2
-        };
-        
-        switch (type) {
-            case 'collect':
-                particleSystem.createFoodCollectEffect(worldPos);
-                break;
-            case 'explosion':
-                particleSystem.createExplosionEffect(worldPos);
-                break;
-            case 'spawn':
-                particleSystem.createSpawnEffect(worldPos);
-                break;
-        }
-    }
-    
-    // Public API
     addSnake(snake) {
         this.snakes.push(snake);
-        snake.id = `snake_${this.snakes.length}`;
-        console.log(`Added snake: ${snake.id}`);
-    }
-    
-    getAliveSnakes() {
-        return this.snakes.filter(snake => snake.isAlive);
     }
     
     getPlayerSnake() {
-        return this.snakes.find(snake => snake.isPlayer);
+        return this.snakes.find(s => s.isPlayer);
+    }
+    
+    getAliveSnakes() {
+        return this.snakes.filter(s => s.isAlive);
+    }
+    
+    getWorldBounds() {
+        return { width: this.worldWidth, height: this.worldHeight };
     }
     
     getGrid() {
         return this.grid;
     }
     
-    getWorldBounds() {
-        return {
-            width: this.worldWidth,
-            height: this.worldHeight
-        };
-    }
-    
     updateSettings(newSettings) {
-        Object.assign(this.settings, newSettings);
-        console.log('Game settings updated:', this.settings);
-        this.emit('settingsUpdated', { settings: this.settings });
+        this.settings = { ...this.settings, ...newSettings };
     }
     
-    // Cleanup
     destroy() {
-        this.isRunning = false;
+        this.stop();
         window.removeEventListener('resize', this.handleResize);
-        clearTimeout(this.resizeTimeout);
-        
-        // Clear all arrays
-        this.snakes = [];
-        this.food = [];
-        this.particles = [];
-        this.eventListeners = {};
-        
-        console.log('GameEngine destroyed');
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.GameEngine = GameEngine;
 }

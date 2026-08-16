@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Snake42 AI - Multi-AI Snake Game</title>
     
     <!-- Styles -->
@@ -24,7 +24,7 @@
         <div class="menu-container">
             <div class="logo-container">
                 <h1 class="game-title">Snake<span class="highlight">42</span></h1>
-                <p class="game-subtitle">Multi-AI Snake Battle</p>
+                <p class="game-subtitle">Multi-AI Snake Battle Royale</p>
             </div>
             
             <nav class="main-nav">
@@ -33,6 +33,11 @@
                     <span class="btn-decoration"></span>
                 </button>
                 
+                <button id="high-scores-btn" class="menu-btn">
+                    <span class="btn-text">🏆 High Scores</span>
+                    <span class="btn-decoration"></span>
+                </button>
+
                 <button id="settings" class="menu-btn">
                     <span class="btn-text">Settings</span>
                     <span class="btn-decoration"></span>
@@ -44,13 +49,13 @@
                 </button>
                 
                 <button id="quit-game" class="menu-btn">
-                    <span class="btn-text">Quit</span>
+                    <span class="btn-text">Quit / Exit</span>
                     <span class="btn-decoration"></span>
                 </button>
             </nav>
             
             <div class="version-info">
-                <span id="app-version">v1.0.0</span>
+                <span id="app-version">v1.1.0 Enhanced</span>
             </div>
         </div>
     </div>
@@ -60,11 +65,11 @@
         <div class="game-hud">
             <div class="hud-left">
                 <div class="score-display">
-                    <span class="score-label">Human Player</span>
+                    <span class="score-label">Player</span>
                     <span id="player-score" class="score-value">0</span>
                 </div>
                 <div class="ai-stats">
-                    <span class="ai-label">AI Snakes Active:</span>
+                    <span class="ai-label">Active AI:</span>
                     <span id="ai-count" class="ai-value">4</span>
                 </div>
             </div>
@@ -74,6 +79,10 @@
                     <span class="pause-icon">⏸️</span>
                     <span class="pause-text">Pause</span>
                 </button>
+                <button id="sound-hud-btn" class="control-btn">
+                    🔊 Sound: ON
+                </button>
+                <div id="combo-display" class="combo-badge" style="display: none;"></div>
             </div>
             
             <div class="hud-right">
@@ -94,7 +103,17 @@
             <div id="particle-container"></div>
         </div>
         
-        <!-- Game Controls Info -->
+        <!-- Touch Virtual D-Pad for Mobile / Tablet -->
+        <div id="virtual-dpad" class="dpad-container">
+            <button id="dpad-up" class="dpad-btn dpad-up">▲</button>
+            <div class="dpad-row">
+                <button id="dpad-left" class="dpad-btn dpad-left">◀</button>
+                <button id="dpad-down" class="dpad-btn dpad-down">▼</button>
+                <button id="dpad-right" class="dpad-btn dpad-right">▶</button>
+            </div>
+        </div>
+
+        <!-- Controls Info -->
         <div class="controls-info">
             <div class="control-item">
                 <kbd>WASD</kbd> or <kbd>Arrow Keys</kbd> - Move
@@ -103,11 +122,39 @@
                 <kbd>Space</kbd> - Pause
             </div>
             <div class="control-item">
-                <kbd>Esc</kbd> - Back to Menu
+                <kbd>Esc</kbd> - Menu
             </div>
         </div>
     </div>
     
+    <!-- Leaderboard / High Scores Screen -->
+    <div id="leaderboard-screen" class="screen">
+        <div class="settings-container">
+            <h2 class="screen-title">🏆 High Scores</h2>
+            
+            <div class="leaderboard-table-container">
+                <table class="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Name</th>
+                            <th>Score</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-tbody">
+                        <!-- Populated by menu.js -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="settings-actions" style="margin-top: 20px;">
+                <button id="clear-scores-btn" class="menu-btn danger">Clear High Scores</button>
+                <button id="back-to-menu-leaderboard" class="menu-btn primary">Back to Menu</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Settings Screen -->
     <div id="settings-screen" class="screen">
         <div class="settings-container">
@@ -137,15 +184,6 @@
                 </div>
                 
                 <div class="setting-group">
-                    <label for="grid-size">Grid Size</label>
-                    <select id="grid-size">
-                        <option value="20">Small (20x15)</option>
-                        <option value="25" selected>Medium (25x19)</option>
-                        <option value="30">Large (30x23)</option>
-                    </select>
-                </div>
-                
-                <div class="setting-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="sound-enabled" checked>
                         <span class="checkmark"></span>
@@ -164,8 +202,8 @@
             
             <div class="settings-actions">
                 <button id="save-settings" class="menu-btn primary">Save Settings</button>
-                <button id="reset-settings" class="menu-btn">Reset to Defaults</button>
-                <button id="back-to-menu" class="menu-btn">Back to Menu</button>
+                <button id="reset-settings" class="menu-btn">Reset Defaults</button>
+                <button id="back-to-menu-settings" class="menu-btn">Back to Menu</button>
             </div>
         </div>
     </div>
@@ -178,49 +216,79 @@
             <div class="help-content">
                 <div class="help-section">
                     <h3>Objective</h3>
-                    <p>Control your snake and compete against AI snakes. Eat food to grow longer and score points. Avoid colliding with walls, yourself, or other snakes!</p>
+                    <p>Control your cyan snake in a real-time battle against intelligent AI competitors. Collect food and powerful orbs to grow longer, trigger combos, and outlast all opponents!</p>
                 </div>
                 
                 <div class="help-section">
-                    <h3>Controls</h3>
-                    <div class="controls-list">
-                        <div class="control-row">
-                            <kbd>W A S D</kbd> or <kbd>↑ ← ↓ →</kbd>
-                            <span>Move your snake</span>
+                    <h3>Power-Ups</h3>
+                    <div class="ai-types">
+                        <div class="ai-type">
+                            <span class="powerup-icon">⚡</span>
+                            <div class="ai-info">
+                                <strong>Speed Boost</strong>
+                                <p>Double speed for 5 seconds</p>
+                            </div>
                         </div>
-                        <div class="control-row">
-                            <kbd>Space</kbd>
-                            <span>Pause/Resume game</span>
+                        <div class="ai-type">
+                            <span class="powerup-icon">🛡️</span>
+                            <div class="ai-info">
+                                <strong>Shield Aura</strong>
+                                <p>Absorbs 1 fatal wall or snake collision</p>
+                            </div>
                         </div>
-                        <div class="control-row">
-                            <kbd>Escape</kbd>
-                            <span>Return to main menu</span>
+                        <div class="ai-type">
+                            <span class="powerup-icon">🧪</span>
+                            <div class="ai-info">
+                                <strong>Shrink Orb</strong>
+                                <p>Shrinks tail length by 3 segments</p>
+                            </div>
+                        </div>
+                        <div class="ai-type">
+                            <span class="powerup-icon">🌟</span>
+                            <div class="ai-info">
+                                <strong>Double Score</strong>
+                                <p>2x points for 8 seconds</p>
+                            </div>
+                        </div>
+                        <div class="ai-type">
+                            <span class="powerup-icon">❄️</span>
+                            <div class="ai-info">
+                                <strong>Freeze AI</strong>
+                                <p>Freezes opponent AI snakes for 4 seconds</p>
+                            </div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="help-section">
-                    <h3>AI Snake Types</h3>
+                    <h3>AI Personalities</h3>
                     <div class="ai-types">
                         <div class="ai-type aggressive">
-                            <span class="ai-color"></span>
+                            <span class="ai-color" style="background:#ff4757;"></span>
                             <div class="ai-info">
-                                <strong>Aggressive</strong>
-                                <p>Fast and direct, goes straight for food</p>
+                                <strong>Aggressive (Red)</strong>
+                                <p>Direct food hunter and player challenger</p>
                             </div>
                         </div>
                         <div class="ai-type defensive">
-                            <span class="ai-color"></span>
+                            <span class="ai-color" style="background:#2ed573;"></span>
                             <div class="ai-info">
-                                <strong>Defensive</strong>
-                                <p>Careful movement, avoids other snakes</p>
+                                <strong>Defensive (Green)</strong>
+                                <p>Survival loop expert, avoids dead ends</p>
                             </div>
                         </div>
                         <div class="ai-type strategic">
-                            <span class="ai-color"></span>
+                            <span class="ai-color" style="background:#ffa502;"></span>
                             <div class="ai-info">
-                                <strong>Strategic</strong>
-                                <p>Plans ahead, blocks other snakes</p>
+                                <strong>Strategic (Orange)</strong>
+                                <p>Interceptor pathfinder & power-up collector</p>
+                            </div>
+                        </div>
+                        <div class="ai-type greedy">
+                            <span class="ai-color" style="background:#a55eea;"></span>
+                            <div class="ai-info">
+                                <strong>Greedy (Purple)</strong>
+                                <p>Hyper-fixated on rare power-ups</p>
                             </div>
                         </div>
                     </div>
@@ -252,6 +320,11 @@
                     <span id="ai-remaining" class="stat-value">0</span>
                 </div>
             </div>
+
+            <div class="save-score-form" style="margin: 15px 0;">
+                <input type="text" id="player-name-input" placeholder="Enter your name" maxlength="15" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--primary-accent); background: var(--secondary-bg); color: #fff; font-family: var(--font-primary);">
+                <button id="save-score-btn" class="menu-btn" style="margin-left: 10px; padding: 8px 15px;">Save High Score</button>
+            </div>
             
             <div class="game-over-actions">
                 <button id="play-again" class="menu-btn primary">Play Again</button>
@@ -269,11 +342,12 @@
                 <div class="snake-segment"></div>
                 <div class="snake-segment"></div>
             </div>
-            <p class="loading-text">Loading AI Snakes...</p>
+            <p class="loading-text">Spawning Battle Arena & AI Snakes...</p>
         </div>
     </div>
     
     <!-- Scripts -->
+    <script src="audio/sound.js"></script>
     <script src="game/game-engine.js"></script>
     <script src="game/snake.js"></script>
     <script src="game/ai-strategies.js"></script>

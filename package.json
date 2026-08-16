@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "serve": "node server.js",
     "dev": "concurrently \"npm run watch\" \"electron . --dev\"",
     "watch": "echo 'Watching for changes...'",
     "build": "electron-builder",
